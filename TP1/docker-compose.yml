@@ -5,3 +5,5 @@ services:
       - .:/app
     tty: true
     stdin_open: true
+    environment:
+      - PYTHONUNBUFFERED=1
