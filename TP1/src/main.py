@@ -2,6 +2,7 @@ import multiprocessing
 import time
 import signal
 import json
+import os
 from recolector import recolector_main
 from analizadores.resumen import analizador_resumen_main
 from analizadores.memoria import analizador_memoria_main
@@ -14,9 +15,19 @@ from display import display_main
 
 # --- BANDERAS PARA SEÑALES ---
 shutdown_flag = False
-reload_config_flag = False
 dump_snapshot_flag = False
-verbose_mode = False
+intervalos_compartidos = {}
+verbose_mode = None
+
+MIN_INTERVALOS = {
+    "resumen": 0.5,
+    "memoria": 1.0,
+    "fds": 2.0,
+    "threads": 0.5,
+    "senales": 5.0,
+    "scheduling": 1.0,
+    "sistema": 1.0
+}
 
 # --- HANDLERS (Solo prenden las banderas) ---
 def handle_shutdown(signum, frame):
@@ -24,8 +35,17 @@ def handle_shutdown(signum, frame):
     shutdown_flag = True
 
 def handle_sighup(signum, frame):
-    global reload_config_flag
-    reload_config_flag = True
+    config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "config.json")
+    try:
+        with open(config_path, "r") as f:
+            config = json.load(f)
+        defaults = config.get("intervalos_default", {})
+        for nombre, intervalo in defaults.items():
+            if nombre in intervalos_compartidos:
+                minimo = MIN_INTERVALOS[nombre]
+                intervalos_compartidos[nombre].value = max(float(intervalo), minimo)
+    except (FileNotFoundError, json.JSONDecodeError, ValueError, TypeError):
+        pass
 
 def handle_sigusr1(signum, frame):
     global dump_snapshot_flag
@@ -33,7 +53,8 @@ def handle_sigusr1(signum, frame):
 
 def handle_sigusr2(signum, frame):
     global verbose_mode
-    verbose_mode = not verbose_mode
+    if verbose_mode is not None:
+        verbose_mode.value = 0 if verbose_mode.value else 1
 
 if __name__ == "__main__":
     with multiprocessing.Manager() as manager:
@@ -56,6 +77,17 @@ if __name__ == "__main__":
         intervalo_senales = multiprocessing.Value('d', 10.0)
         intervalo_sched = multiprocessing.Value('d', 3.0)
         intervalo_sistema = multiprocessing.Value('d', 3.0)
+        verbose_mode = multiprocessing.Value('i', 0)
+
+        intervalos_compartidos = {
+            "resumen": intervalo_resumen,
+            "memoria": intervalo_memoria,
+            "fds": intervalo_fds,
+            "threads": intervalo_threads,
+            "senales": intervalo_senales,
+            "scheduling": intervalo_sched,
+            "sistema": intervalo_sistema
+        }
 
         # Instanciar los 7 analizadores + recolector + display
         p_recolector = multiprocessing.Process(target=recolector_main, args=(snapshot,))
@@ -70,7 +102,7 @@ if __name__ == "__main__":
         p_display = multiprocessing.Process(
             target=display_main, 
             args=(snapshot, intervalo_resumen, intervalo_memoria, intervalo_fds, 
-                  intervalo_threads, intervalo_senales, intervalo_sched, intervalo_sistema)
+                  intervalo_threads, intervalo_senales, intervalo_sched, intervalo_sistema, verbose_mode)
         )
 
         # Arrancar todos
@@ -88,10 +120,6 @@ if __name__ == "__main__":
         try:
             # El loop principal revisa periódicamente las banderas
             while not shutdown_flag:
-                if reload_config_flag:
-                    # Cumple con el requisito de atrapar SIGHUP sin romper el flujo
-                    reload_config_flag = False
-                
                 if dump_snapshot_flag:
                     # Captura el estado actual en un archivo
                     timestamp = int(time.time())
