@@ -1,6 +1,8 @@
 import os
 import time
 
+MAX_FDS_MUESTRA = 25
+
 def extraer_datos_fds(pid):
     """Cuenta y lista los File Descriptors de un proceso."""
     datos = {"pid": pid, "total_fds": 0, "lista_fds": []}
@@ -9,11 +11,11 @@ def extraer_datos_fds(pid):
     try:
         if os.path.exists(fd_dir):
             # Listamos todos los enlaces simbólicos en la carpeta fd
-            fds = os.listdir(fd_dir)
+            fds = sorted(os.listdir(fd_dir), key=lambda x: int(x) if x.isdigit() else x)
             datos["total_fds"] = len(fds)
             
-            # Agarramos los primeros 5 para no saturar la memoria compartida
-            for fd in fds[:5]:
+            # Conservamos una muestra amplia para habilitar modo detallado en la vista
+            for fd in fds[:MAX_FDS_MUESTRA]:
                 try:
                     destino = os.readlink(f"{fd_dir}/{fd}")
                     datos["lista_fds"].append(f"{fd}->{destino}")

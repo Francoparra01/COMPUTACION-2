@@ -20,7 +20,7 @@ def restore_terminal(old_settings, fd):
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
     os.close(fd)
 
-def display_main(snapshot, int_resumen, int_memoria, int_fds, int_threads, int_senales, int_sched, int_sistema):
+def display_main(snapshot, int_resumen, int_memoria, int_fds, int_threads, int_senales, int_sched, int_sistema, verbose_mode):
     vista_activa = '1'
     print("[Display] Iniciado.")
 
@@ -87,11 +87,16 @@ def display_main(snapshot, int_resumen, int_memoria, int_fds, int_threads, int_s
                     print(f"{pid:<10} | {datos.get('vmsize', '0'):<15} | {datos.get('vmrss', '0'):<15}")
 
             elif vista_activa == '3':
-                print(f"=== VISTA 3: FDs | Refresco: {int_fds.value:.1f}s ===")
+                detalle_fds = "ON" if verbose_mode.value else "OFF"
+                print(f"=== VISTA 3: FDs | Refresco: {int_fds.value:.1f}s | Detalle SIGUSR2: {detalle_fds} ===")
                 print(f"{'PID':<10} | {'TOTAL FDs':<10} | {'MUESTRA DE DESTINOS'}")
                 print("-" * 70)
                 for pid, datos in list(snapshot.get("fds", {}).items())[:20]:
-                    destinos = ", ".join(datos.get("lista_fds", []))[:45]
+                    lista_fds = datos.get("lista_fds", [])
+                    if not verbose_mode.value:
+                        lista_fds = lista_fds[:5]
+                    destinos = ", ".join(lista_fds)
+                    destinos = destinos[:140] if verbose_mode.value else destinos[:45]
                     print(f"{pid:<10} | {datos.get('total_fds', 0):<10} | {destinos}")
                 
             elif vista_activa == '4':

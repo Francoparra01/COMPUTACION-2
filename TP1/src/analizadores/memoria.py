@@ -2,18 +2,62 @@ import time
 
 def extraer_datos_memoria(pid):
     """Extrae información de memoria desde /proc/<pid>/status."""
-    datos = {"pid": pid, "vmsize": "0", "vmrss": "0"}
+    datos = {
+        "pid": pid,
+        "vmsize": "0",
+        "vmrss": "0",
+        "vmdata": "0",
+        "vmstk": "0",
+        "vmexe": "0",
+        "vmlib": "0",
+        "vmhwm": "0",
+        "vmswap": "0",
+        "minflt": "0",
+        "cminflt": "0",
+        "majflt": "0",
+        "cmajflt": "0",
+        "mapas": []
+    }
+
+    campos_status = {
+        "VmSize:": "vmsize",
+        "VmRSS:": "vmrss",
+        "VmData:": "vmdata",
+        "VmStk:": "vmstk",
+        "VmExe:": "vmexe",
+        "VmLib:": "vmlib",
+        "VmHWM:": "vmhwm",
+        "VmSwap:": "vmswap"
+    }
+
     try:
         with open(f"/proc/{pid}/status", "r") as f:
             for linea in f:
-                if linea.startswith("VmSize:"):
-                    datos["vmsize"] = linea.split()[1] 
-                elif linea.startswith("VmRSS:"):
-                    datos["vmrss"] = linea.split()[1]
-                    
-    except (FileNotFoundError, ProcessLookupError):
+                for campo, clave in campos_status.items():
+                    if linea.startswith(campo):
+                        datos[clave] = linea.split()[1]
+                        break
+
+        with open(f"/proc/{pid}/stat", "r") as f:
+            contenido = f.readline().strip()
+            fin_comm = contenido.rfind(")")
+            if fin_comm != -1:
+                partes = contenido[fin_comm + 2:].split()
+                if len(partes) > 10:
+                    datos["minflt"] = partes[7]
+                    datos["cminflt"] = partes[8]
+                    datos["majflt"] = partes[9]
+                    datos["cmajflt"] = partes[10]
+
+        with open(f"/proc/{pid}/maps", "r") as f:
+            for linea in f:
+                partes = linea.split()
+                if len(partes) >= 2:
+                    datos["mapas"].append({"rango": partes[0], "permisos": partes[1]})
+                     
+    except (FileNotFoundError, ProcessLookupError, PermissionError, IndexError):
         pass
-        
+         
     return datos
 
 def analizador_memoria_main(snapshot, intervalo_val):
